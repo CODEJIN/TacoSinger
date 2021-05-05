@@ -1,4 +1,4 @@
-# HiFiSinger
+# TacoSinger
 
 This code is an implementation for Singing TTS. The algorithm is based on the following papers:
 
