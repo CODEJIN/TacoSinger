@@ -1,0 +1,92 @@
+Sound:
+    N_FFT: 1024
+    Frame_Length: 1024
+    Frame_Shift: 256
+    Sample_Rate: 22050
+
+Tokens: 77
+Max_Note: 100
+Min_Duration: 600
+Max_Duration: 1200
+
+Encoder:    
+    Token_Embedding_Size: 512
+    Note_Embedding_Size: 256
+    Conv:
+        Kernel_Size: [5, 5, 5]
+        Channels: [512, 512, 512]
+        Dropout: 0.5
+    LSTM:
+        Size: 512   # forward + backward
+        Stacks: 1
+
+Decoder:
+    Prenet:
+        Sizes: [256, 256]
+        Dropout_Rate: 0.5
+    Pre_LSTM:
+        Size: 1024
+        Zoneout_Rate: 0.1
+    Attention:
+        Channels: 128
+        RNN_Channels: 512
+        Static:
+            Channels: 8
+            Kernel_Size: 21
+        Dynamic:
+            Channels: 8
+            Kernel_Size: 21
+        Causal:
+            Kernel_Size: 11
+            Alpha: 0.1
+            Beta: 0.9
+    Post_LSTM:
+        Size: 1024
+        Zoneout_Rate: 0.1
+
+Postnet:
+    Kernel_Size: [5,5,5,5]
+    Channels: [512,512,512,512]
+    Dropout_Rate: 0.5
+
+Token_Path: 'E:/22K.Music/Token.yaml' # '/datasets/22K.TTS/Token.yaml'
+Train:
+    Train_Pattern:
+        Path: 'E:/22K.Music/Train' # '/datasets/22K.TTS/Train'
+        Metadata_File: 'METADATA.PICKLE'
+    Eval_Pattern:
+        Path: 'E:/22K.Music/Eval' # '/datasets/22K.TTS/Eval'
+        Metadata_File: 'METADATA.PICKLE'
+    Num_Workers: 2
+    Batch_Size: 16
+    Learning_Rate:
+        Initial: 2.0e-4
+        Base: 4000
+    ADAM:
+        Beta1: 0.9
+        Beta2: 0.999
+        Epsilon: 1.0e-7
+    Weight_Decay: 1.0e-6
+    Gradient_Norm: 10.0
+    Max_Step: 100000
+    Checkpoint_Save_Interval: 1000
+    Logging_Interval: 1
+    Evaluation_Interval: 100
+    Inference_Interval: 1000
+    Initial_Inference: false
+    Inference_Pattern_in_Train: [
+        './Inference_for_Training/Example1.txt',
+        './Inference_for_Training/Example2.txt',
+        './Inference_for_Training/Example3.txt',
+        ]
+
+Inference_Batch_Size: 16
+Inference_Text_Path: './Inference_Text.txt'
+Ignore_Stop: true   # If true, inference is always progressed until max iteration (Stop tokens are ignored).
+Inference_Path: 'E:/TacoSinger/Inference' # '/data/results/Tacotron2/GST.AIHub/Inference'
+Checkpoint_Path: 'E:/TacoSinger/Checkpoint' # '/data/results/Tacotron2/GST.AIHub/Checkpoint'
+Log_Path: 'E:/TacoSinger/Log' # '/data/results/Tacotron2/GST.AIHub/Log'
+
+Use_Mixed_Precision: true
+Use_Multi_GPU: false
+Device: '0'
