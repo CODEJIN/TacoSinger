@@ -146,7 +146,7 @@ class Attention(nn.Module):
         if mask is not None:
             alignment.data.masked_fill_(mask, self.score_mask_value)
 
-        attn_weights = F.softmax(alignment + 1e-5, dim=1)  # [B, T]
+        attn_weights = F.softmax(alignment.double(), dim=1).to(alignment.dtype)  # [B, T]
         context = torch.bmm(attn_weights.unsqueeze(1), memory)
         # [B, 1, T] @ [B, T, (chn.encoder + chn.speaker)] -> [B, 1, (chn.encoder + chn.speaker)]
         context = context.squeeze(1)
