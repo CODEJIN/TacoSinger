@@ -41,13 +41,13 @@ Postnet:
     Channels: [512,512,512,512]
     Dropout_Rate: 0.5
 
-Token_Path: 'E:/22K.Music/Token.yaml' # '/datasets/22K.TTS/Token.yaml'
+Token_Path: '/datasets/22K.Music/Token.yaml' # '/datasets/22K.TTS/Token.yaml'
 Train:
     Train_Pattern:
-        Path: 'E:/22K.Music/Train' # '/datasets/22K.TTS/Train'
+        Path: '/datasets/22K.Music/Train' # '/datasets/22K.TTS/Train'
         Metadata_File: 'METADATA.PICKLE'
     Eval_Pattern:
-        Path: 'E:/22K.Music/Eval' # '/datasets/22K.TTS/Eval'
+        Path: '/datasets/22K.Music/Eval' # '/datasets/22K.TTS/Eval'
         Metadata_File: 'METADATA.PICKLE'
     Num_Workers: 2
     Batch_Size: 16
@@ -75,10 +75,10 @@ Train:
 Inference_Batch_Size: 16
 Inference_Text_Path: './Inference_Text.txt'
 Ignore_Stop: true   # If true, inference is always progressed until max iteration (Stop tokens are ignored).
-Inference_Path: 'E:/TacoSinger/LSA/Inference' # '/data/results/Tacotron2/GST.AIHub/Inference'
-Checkpoint_Path: 'E:/TacoSinger/LSA/Checkpoint' # '/data/results/Tacotron2/GST.AIHub/Checkpoint'
-Log_Path: 'E:/TacoSinger/LSA/Log' # '/data/results/Tacotron2/GST.AIHub/Log'
+Inference_Path: '/data/results/TacoSinger/LSA/Inference' # '/data/results/Tacotron2/GST.AIHub/Inference'
+Checkpoint_Path: '/data/results/TacoSinger/LSA/Checkpoint' # '/data/results/Tacotron2/GST.AIHub/Checkpoint'
+Log_Path: '/data/results/TacoSinger/LSA/Log' # '/data/results/Tacotron2/GST.AIHub/Log'
 
-Use_Mixed_Precision: true
+Use_Mixed_Precision: false
 Use_Multi_GPU: false
-Device: '0'
+Device: '1'

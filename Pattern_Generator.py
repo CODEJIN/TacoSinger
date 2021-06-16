@@ -21,7 +21,7 @@ def Pattern_Generate(
             if os.path.splitext(file)[1] != '.wav':
                 continue
             wav_path = os.path.join(root, file).replace('\\', '/')
-            midi_path = wav_path.replace('vox.wav', 'midi.mid')
+            midi_path = wav_path.replace('.wav', '.mid')
             paths.append((wav_path, midi_path))
 
     if eval_index >= len(paths):
@@ -225,4 +225,4 @@ if __name__ == "__main__":
     Metadata_Generate(hp, False)
     Metadata_Generate(hp, True)
 
-    # python Pattern_Generator.py -hp Hyper_Parameters.yaml -d "E:/Pattern/Sing/108곡 시작 끝 Note 수정 작업 파일" -eval 107
+    # python Pattern_Generator.py -hp Hyper_Parameters.yaml -d /rawdata/Music -eval 107
