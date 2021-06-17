@@ -1,7 +1,6 @@
 from argparse import Namespace
 import torch
-from dca_attention import Attention
-from zoneout import ZoneoutLSTMCell
+from LSSMA import Location_Sensitive_Stepwise_Monotonic_Attention as Attention
 
 class TacoSinger(torch.nn.Module):
     def __init__(self, hyper_parameters: Namespace):
@@ -145,30 +144,34 @@ class Decoder(torch.nn.Module):
             dropout_rate= self.hp.Decoder.Prenet.Dropout_Rate
             )
         
-        self.pre_lstm = ZoneoutLSTMCell(
+        self.pre_lstm = torch.nn.LSTMCell(
             input_size= self.hp.Decoder.Prenet.Sizes[-1] + self.hp.Encoder.LSTM.Size,   # encoding size == previous context size
             hidden_size= self.hp.Decoder.Pre_LSTM.Size,
-            bias= True,
-            zoneout_rate= self.hp.Decoder.Pre_LSTM.Zoneout_Rate
+            bias= True
+            )
+        self.pre_lstm_dropout = torch.nn.Dropout(
+            p= self.hp.Decoder.Pre_LSTM.Dropout_Rate
             )
 
         self.attention = Attention(
-            attn_rnn_dim= self.hp.Decoder.Pre_LSTM.Size,
-            attn_dim= self.hp.Decoder.Attention.Channels,
-            static_channels= self.hp.Decoder.Attention.Static.Channels,
-            static_kernel_size= self.hp.Decoder.Attention.Static.Kernel_Size,
-            dynamic_channels= self.hp.Decoder.Attention.Dynamic.Channels,
-            dynamic_kernel_size= self.hp.Decoder.Attention.Dynamic.Kernel_Size,
-            causal_n= self.hp.Decoder.Attention.Causal.Kernel_Size,
-            causal_alpha= self.hp.Decoder.Attention.Causal.Alpha,
-            causal_beta= self.hp.Decoder.Attention.Causal.Beta
+            attention_rnn_channels= self.hp.Decoder.Pre_LSTM.Size,
+            memory_size= self.hp.Encoder.LSTM.Size,
+            attention_size= self.hp.Decoder.Attention.Channels,
+            attention_location_channels= self.hp.Decoder.Attention.Conv.Channels,
+            attention_location_kernel_size= self.hp.Decoder.Attention.Conv.Kernel_Size,
+            sigmoid_noise= self.hp.Decoder.Attention.Sigmoid_Noise,
+            normalize= self.hp.Decoder.Attention.Normalize,
+            channels_last= True
             )
 
-        self.post_lstm = ZoneoutLSTMCell(
+
+        self.post_lstm = torch.nn.LSTMCell(
             input_size= self.hp.Decoder.Pre_LSTM.Size + self.hp.Encoder.LSTM.Size,
             hidden_size= self.hp.Decoder.Post_LSTM.Size,
-            bias= True,
-            zoneout_rate= self.hp.Decoder.Post_LSTM.Zoneout_Rate
+            bias= True
+            )
+        self.post_lstm_dropout = torch.nn.Dropout(
+            p= self.hp.Decoder.Post_LSTM.Dropout_Rate
             )
 
         self.projection = Linear(
@@ -207,6 +210,8 @@ class Decoder(torch.nn.Module):
         contexts, alignments = self.Get_Attention_Initial_States(
             memories= encodings
             )
+        cumulated_alignments = alignments
+        processed_memories = self.attention.Get_Processed_Memory(encodings)
         
         features_list, alignments_list = [], []
         for step in range(features.size(1)):
@@ -216,18 +221,23 @@ class Decoder(torch.nn.Module):
                 x,  # contexts_t-1
                 (pre_lstm_hidden, pre_lstm_cell)
                 )
+            pre_lstm_hidden = self.pre_lstm_dropout(pre_lstm_hidden)
 
             contexts, alignments = self.attention(
-                attn_hidden= pre_lstm_hidden,
-                memory= encodings,
-                prev_attn= alignments,
-                mask= encoding_masks
+                queries= pre_lstm_hidden,
+                memories= encodings,
+                processed_memories= processed_memories,
+                previous_alignments= alignments,
+                cumulated_alignments= cumulated_alignments,
+                masks= encoding_masks
                 )
+            cumulated_alignments = cumulated_alignments + alignments
 
             post_lstm_hidden, post_lstm_cell = self.post_lstm(
                 torch.cat([pre_lstm_hidden, contexts], dim= 1),  # contexts_t
                 (post_lstm_hidden, post_lstm_cell)
                 )
+            post_lstm_hidden = self.post_lstm_dropout(post_lstm_hidden)
 
             decodings = torch.cat([post_lstm_hidden, contexts], dim= 1)
 
@@ -257,6 +267,8 @@ class Decoder(torch.nn.Module):
         contexts, alignments = self.Get_Attention_Initial_States(
             memories= encodings
             )
+        cumulated_alignments = alignments
+        processed_memories = self.attention.Get_Processed_Memory(encodings)
         
         features_list, alignments_list = [features], []
 
@@ -273,11 +285,14 @@ class Decoder(torch.nn.Module):
                 )
 
             contexts, alignments = self.attention(
-                attn_hidden= pre_lstm_hidden,
-                memory= encodings,
-                prev_attn= alignments,
-                mask= encoding_masks
+                queries= pre_lstm_hidden,
+                memories= encodings,
+                processed_memories= processed_memories,
+                previous_alignments= alignments,
+                cumulated_alignments= cumulated_alignments,
+                masks= encoding_masks
                 )
+            cumulated_alignments = cumulated_alignments + alignments
 
             post_lstm_hidden, post_lstm_cell = self.post_lstm(
                 torch.cat([pre_lstm_hidden, contexts], dim= 1),  # contexts_t
