@@ -9,16 +9,14 @@ Max_Note: 100
 Min_Duration: 600
 Max_Duration: 1200
 
-Encoder:    
-    Token_Embedding_Size: 512
-    Note_Embedding_Size: 256
-    Conv:
-        Kernel_Size: [5, 5, 5]
-        Channels: [512, 512, 512]
-        Dropout: 0.5
-    LSTM:
-        Size: 512   # forward + backward
-        Stacks: 1
+Encoder:
+    Size: 768
+    Positional_Encoding:
+        Dropout_Rate: 0.5
+    Transformer:
+        Num_Layers: 6
+        Head: 2
+        Dropout_Rate: 0.5
 
 Decoder:
     Prenet:
@@ -76,10 +74,10 @@ Train:
 
 Inference_Batch_Size: 16
 Inference_Text_Path: './Inference_Text.txt'
-Inference_Path: '/data/results/TacoSinger/LSSMA/Inference' # '/data/results/Tacotron2/GST.AIHub/Inference'
-Checkpoint_Path: '/data/results/TacoSinger/LSSMA/Checkpoint' # '/data/results/Tacotron2/GST.AIHub/Checkpoint'
-Log_Path: '/data/results/TacoSinger/LSSMA/Log' # '/data/results/Tacotron2/GST.AIHub/Log'
+Inference_Path: '/data/results/TacoSinger/TransLSSMA/Inference' # '/data/results/Tacotron2/GST.AIHub/Inference'
+Checkpoint_Path: '/data/results/TacoSinger/TransLSSMA/Checkpoint' # '/data/results/Tacotron2/GST.AIHub/Checkpoint'
+Log_Path: '/data/results/TacoSinger/TransLSSMA/Log' # '/data/results/Tacotron2/GST.AIHub/Log'
 
 Use_Mixed_Precision: true
 Use_Multi_GPU: true
-Device: '4,5,6,7'
+Device: '0,1,2,3'

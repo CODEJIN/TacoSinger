@@ -12,7 +12,7 @@ def Decompose(syllable):
     return onset, nucleus, coda
 
 def Text_to_Token(text: list, token_dict: dict):
-    return [token_dict[x] for x in text]
+    return np.array([token_dict[x] for x in text], dtype= np.int32)
 
 def Feature_Stack(features: list):
     max_length = max([feature.shape[0] for feature in features])
@@ -157,15 +157,16 @@ class Collater:
 
     def __call__(self, batch):
         tokens, notes, durations, features = zip(*batch)
+        
+        token_lengths = [token.shape[0] + 1 for token in tokens]    # 1 is for padding '<X>'
 
-        lengths = [sum(duration) for duration in durations]
-
-        sorting = sorted(range(len(lengths)), key=lambda x: lengths[x], reverse= True)
+        sorting = sorted(range(len(token_lengths)), key=lambda x: token_lengths[x], reverse= True)
         tokens = [tokens[index] for index in sorting]
         notes = [notes[index] for index in sorting]
         durations = [durations[index] for index in sorting]
-        features = [features[index] for index in sorting]
-        lengths = [lengths[index] for index in sorting]
+        features = [features[index] for index in sorting]        
+        token_lengths = [token_lengths[index] for index in sorting]
+        feature_lengths = [feature.shape[0] for feature in features]
 
         tokens = Token_Stack(tokens, self.token_dict)
         notes = Note_Stack(notes)
@@ -175,10 +176,11 @@ class Collater:
         tokens = torch.LongTensor(tokens)   # [Batch, Time]
         notes = torch.LongTensor(notes)   # [Batch]
         durations = torch.LongTensor(durations)   # [Batch]
+        token_lengths = torch.LongTensor(token_lengths)   # [Batch]
         features = torch.FloatTensor(features).permute(0, 2, 1)   # [Batch, Feature_dim, Time]
-        lengths = torch.LongTensor(lengths)   # [Batch]
+        feature_lengths = torch.LongTensor(feature_lengths)   # [Batch]
 
-        return tokens, notes, durations, lengths, features
+        return tokens, notes, durations, token_lengths, features, feature_lengths
 
 class Inference_Collater:
     def __init__(self, token_dict: Dict[str, int]):
@@ -187,13 +189,14 @@ class Inference_Collater:
     def __call__(self, batch):
         tokens, notes, durations, texts, decomposed_texts = zip(*batch)
         
-        lengths = [sum(duration) for duration in durations]
+        token_lengths = [token.shape[0] + 1 for token in tokens]    # 1 is for padding '<X>'
 
-        sorting = sorted(range(len(lengths)), key=lambda x: lengths[x], reverse= True)
+        sorting = sorted(range(len(token_lengths)), key=lambda x: token_lengths[x], reverse= True)
         tokens = [tokens[index] for index in sorting]
         notes = [notes[index] for index in sorting]
         durations = [durations[index] for index in sorting]
-        lengths = [lengths[index] for index in sorting]
+        token_lengths = [token_lengths[index] for index in sorting]
+        feature_lengths = [sum(duration) for duration in durations]
 
         texts = [texts[index] for index in sorting]
         decomposed_texts = [decomposed_texts[index] for index in sorting]
@@ -205,8 +208,9 @@ class Inference_Collater:
         tokens = torch.LongTensor(tokens)   # [Batch, Time]
         notes = torch.LongTensor(notes)   # [Batch]
         durations = torch.LongTensor(durations)   # [Batch]
-        lengths = torch.LongTensor(lengths)   # [Batch]
+        token_lengths = torch.LongTensor(token_lengths)   # [Batch]
+        feature_lengths = torch.LongTensor(feature_lengths)   # [Batch]
 
         restoring = sorted(range(len(sorting)), key=lambda x: sorting[x])
 
-        return tokens, notes, durations, lengths, texts, decomposed_texts, restoring
+        return tokens, notes, durations, token_lengths, feature_lengths, texts, decomposed_texts, restoring

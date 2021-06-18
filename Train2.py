@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from librosa import griffinlim
 from scipy.io import wavfile
 
-from Modules import TacoSinger
+from Modules2 import TacoSinger
 from Guided_Attention import Guided_Attention_Loss
 from Datasets import Dataset, Inference_Dataset, Collater, Inference_Collater
 from Radam import RAdam

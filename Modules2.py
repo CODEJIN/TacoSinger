@@ -1,5 +1,6 @@
 from argparse import Namespace
 import torch
+import math
 from LSSMA import Location_Sensitive_Stepwise_Monotonic_Attention as Attention
 
 class TacoSinger(torch.nn.Module):
@@ -46,54 +47,36 @@ class TacoSinger(torch.nn.Module):
         sequence = torch.arange(max_lengths or torch.max(lengths))[None, :].to(lengths.device)
         return sequence >= lengths[:, None]    # [Batch, Time]
 
-
 class Encoder(torch.nn.Module): 
     def __init__(self, hyper_parameters: Namespace):
         super().__init__()
         self.hp = hyper_parameters
-        assert self.hp.Encoder.LSTM.Size % 2 == 0, 'The LSTM size of text encoder must be a even number.'
 
         self.token_embedding = torch.nn.Embedding(
             num_embeddings= self.hp.Tokens,
-            embedding_dim= self.hp.Encoder.Token_Embedding_Size,
+            embedding_dim= self.hp.Encoder.Size,
             )
         self.note_embedding = torch.nn.Embedding(
             num_embeddings= self.hp.Max_Note,
-            embedding_dim= self.hp.Encoder.Note_Embedding_Size,
+            embedding_dim= self.hp.Encoder.Size,
             )
-        torch.nn.init.xavier_uniform_(self.token_embedding.weight)
-        torch.nn.init.xavier_uniform_(self.note_embedding.weight)
-        
-        previous_channels = self.hp.Encoder.Token_Embedding_Size + self.hp.Encoder.Note_Embedding_Size
-        self.conv = torch.nn.Sequential()
-        for index, (kernel_size, channels) in enumerate(zip(
-            self.hp.Encoder.Conv.Kernel_Size,
-            self.hp.Encoder.Conv.Channels
-            )):
-            self.conv.add_module('Conv_{}'.format(index), Conv1d(
-                in_channels= previous_channels,
-                out_channels= channels,
-                kernel_size= kernel_size,
-                padding= (kernel_size - 1) // 2,
-                bias= False,
-                w_init_gain= 'relu'
-                ))
-            self.conv.add_module('BatchNorm_{}'.format(index), torch.nn.BatchNorm1d(
-                num_features= channels
-                ))
-            self.conv.add_module('ReLU_{}'.format(index), torch.nn.ReLU(inplace= False))
-            self.conv.add_module('Dropout_{}'.format(index), torch.nn.Dropout(
-                p= self.hp.Encoder.Conv.Dropout,
-                inplace= True
-                ))
-            previous_channels = channels
+        self.positional_encoding = Positional_Encoding(
+            max_position= self.hp.Max_Duration * 2,
+            embedding_size= self.hp.Encoder.Size,
+            dropout_rate= self.hp.Encoder.Positional_Encoding.Dropout_Rate
+            )
 
-        self.lstm = torch.nn.LSTM(
-            input_size= previous_channels,
-            hidden_size= self.hp.Encoder.LSTM.Size // 2,
-            num_layers= self.hp.Encoder.LSTM.Stacks,
-            batch_first= True,
-            bidirectional= True
+        self.transformer = torch.nn.TransformerEncoder(
+            encoder_layer= torch.nn.TransformerEncoderLayer(
+                d_model= self.hp.Encoder.Size,
+                nhead= self.hp.Encoder.Transformer.Head,
+                dim_feedforward= self.hp.Encoder.Size * 4,
+                dropout= self.hp.Encoder.Transformer.Dropout_Rate
+                ),
+            num_layers= self.hp.Encoder.Transformer.Num_Layers,
+            norm= torch.nn.LayerNorm(
+                normalized_shape= self.hp.Encoder.Size
+                )
             )
 
     def forward(
@@ -106,28 +89,12 @@ class Encoder(torch.nn.Module):
         '''
         tokens: [Batch, Time]
         notes: [Batch, Time]
-        durations: [Batch, Time]
-        lengths: [Batch]
         '''
-        x = torch.cat([
-            self.token_embedding(tokens),
-            self.note_embedding(notes)
-            ], dim= 2).transpose(2, 1)     # [Batch, Dim, Time]
-        # x = torch.stack([
-        #     x.repeat_interleave(duration, dim= 1)
-        #     for x, duration in zip(x, durations)
-        #     ], dim= 0)  # [Batch, Dim, Time]
+        x = self.token_embedding(tokens) + self.note_embedding(notes)   # [Batch, Time, Dim]
+        x = self.positional_encoding(x.permute(0, 2, 1)) # [Batch, Dim, Time]
+        x = self.transformer(x.permute(2, 0, 1))    # [Time, Batch, Emb_dim]
 
-        x = self.conv(x)    # [Batch, Dim, Time]
-        x = torch.nn.utils.rnn.pack_padded_sequence(
-            x.transpose(2, 1),
-            lengths.cpu().numpy(),
-            batch_first= True
-            )
-        x, _ = self.lstm(x)    # [Batch, Time, Dim]
-        x = torch.nn.utils.rnn.pad_packed_sequence(sequence= x, batch_first= True)[0].transpose(2, 1)   # [Batch, Dim, Time]
-
-        return x
+        return x.permute(1, 2, 0)   # [Batch, Emb_dim, Time]
 
 class Decoder(torch.nn.Module):
     def __init__(self, hyper_parameters: Namespace):
@@ -147,7 +114,7 @@ class Decoder(torch.nn.Module):
             )
         
         self.pre_lstm = torch.nn.LSTMCell(
-            input_size= self.hp.Decoder.Prenet.Sizes[-1] + self.hp.Encoder.LSTM.Size,   # encoding size == previous context size
+            input_size= self.hp.Decoder.Prenet.Sizes[-1] + self.hp.Encoder.Size,   # encoding size == previous context size
             hidden_size= self.hp.Decoder.Pre_LSTM.Size,
             bias= True
             )
@@ -157,7 +124,7 @@ class Decoder(torch.nn.Module):
 
         self.attention = Attention(
             attention_rnn_channels= self.hp.Decoder.Pre_LSTM.Size,
-            memory_size= self.hp.Encoder.LSTM.Size,
+            memory_size= self.hp.Encoder.Size,
             attention_size= self.hp.Decoder.Attention.Channels,
             attention_location_channels= self.hp.Decoder.Attention.Conv.Channels,
             attention_location_kernel_size= self.hp.Decoder.Attention.Conv.Kernel_Size,
@@ -168,7 +135,7 @@ class Decoder(torch.nn.Module):
 
 
         self.post_lstm = torch.nn.LSTMCell(
-            input_size= self.hp.Decoder.Pre_LSTM.Size + self.hp.Encoder.LSTM.Size,
+            input_size= self.hp.Decoder.Pre_LSTM.Size + self.hp.Encoder.Size,
             hidden_size= self.hp.Decoder.Post_LSTM.Size,
             bias= True
             )
@@ -177,7 +144,7 @@ class Decoder(torch.nn.Module):
             )
 
         self.projection = Linear(
-            in_features= self.hp.Decoder.Post_LSTM.Size + self.hp.Encoder.LSTM.Size,
+            in_features= self.hp.Decoder.Post_LSTM.Size + self.hp.Encoder.Size,
             out_features= self.feature_size,
             bias= True
             )
@@ -433,3 +400,41 @@ class Linear(torch.nn.Linear):
             )
         if not self.bias is None:
             torch.nn.init.zeros_(self.bias)
+
+# https://pytorch.org/tutorials/beginner/transformer_tutorial.html
+# https://github.com/soobinseo/Transformer-TTS/blob/master/network.py
+class Positional_Encoding(torch.nn.Module):
+    def __init__(
+        self,
+        max_position: int,
+        embedding_size: int,
+        dropout_rate: float,
+        sin_cos_change: bool= False
+        ):
+        super().__init__()
+        self.dropout = torch.nn.Dropout(p= dropout_rate)
+        pe = torch.zeros(max_position, embedding_size)
+        position = torch.arange(0, max_position, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, embedding_size, 2).float() * (-math.log(10000.0) / embedding_size))
+        if sin_cos_change:
+            pe[:, 0::2] = torch.cos(position * div_term)
+            pe[:, 1::2] = torch.sin(position * div_term)
+        else:
+            pe[:, 0::2] = torch.sin(position * div_term)
+            pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0).transpose(2, 1)
+        self.register_buffer('pe', pe)
+
+        self.alpha = torch.nn.Parameter(
+            data= torch.ones(1),
+            requires_grad= True
+            )
+
+    def forward(self, x):
+        '''
+        x: [Batch, Dim, Length]
+        '''
+        x = x + self.alpha * self.pe[:, :, :x.size(2)]
+        x = self.dropout(x)
+
+        return x
